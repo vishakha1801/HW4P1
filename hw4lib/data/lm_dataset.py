@@ -70,9 +70,11 @@ class LMDataset(Dataset):
 
         # TODO: Take subset
         subset_size = self.config.get("subset_size", None)
-        self.text_files = self.text_files[:subset_size] if subset_size > 0 else self.text_files
+        if subset_size is not None and subset_size > 0:
+            self.text_files = self.text_files[:subset_size]
 
-        # Initialize lists to store transcripts
+
+    # Initialize lists to store transcripts
         self.transcripts_shifted = []
         self.transcripts_golden  = []
         
