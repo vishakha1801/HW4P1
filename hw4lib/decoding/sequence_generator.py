@@ -247,6 +247,7 @@ class SequenceGenerator:
         finished  = torch.zeros(batch_size, beam_width, dtype=torch.bool, device=self.device)
 
         # --- Beam Search Loop ---
+
         for _ in range(self.max_length - start_len):
             # stop if all beams finished
             if finished.all():
