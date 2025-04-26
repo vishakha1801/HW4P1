@@ -169,16 +169,20 @@ class ASRDataset(Dataset):
                 M2 += (delta * delta2).sum(dim=1)        # (num_feats,)
 
             # NOTE: The following steps are almost the same as the steps in the LMDataset   
-            
-            if self.partition != "test-clean":
-                # TODO: Load the transcript
-                # Note: Use np.load to load the numpy array and convert to list and then join to string 
-                transcript = np.load(os.path.join(self.text_dir, self.text_files[i]), allow_pickle=True).tolist()
 
-                # TODO: Track character count (before tokenization)
+            if self.partition != "test-clean":
+                # Load the transcript (as a list of chars/strings) and join to one string
+                transcript = ''.join(
+                    np.load(
+                        os.path.join(self.text_dir, self.text_files[i]),
+                        allow_pickle=True
+                    ).tolist()
+                )
+
+                # Track character count (before tokenization)
                 self.total_chars += len(transcript)
 
-                # TODO: Use tokenizer to encode the transcript (see tokenizer.encode for details)
+                # Use tokenizer to encode the transcript
                 tokenized = self.tokenizer.encode(transcript)
 
                 # Track token count (excluding special tokens)
