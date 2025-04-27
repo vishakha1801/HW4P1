@@ -253,28 +253,19 @@ class Conv2DSubsampling(torch.nn.Module):
 ## SpeechEmbedding Class
 ## -------------------------------------------------------------------------------------------------
 class SpeechEmbedding(nn.Module):
-    def __init__(self,
-                 input_dim: int,
-                 output_dim: int = None,
-                 d_model: int = None,
-                 time_reduction: int = 6,
-                 reduction_method: str = 'lstm',
-                 dropout: float = 0.0):
+    def __init__(self, input_dim: int, output_dim: int, time_reduction: int = 6,
+                 reduction_method: str = 'lstm', dropout: float = 0.0):
         """
         Args:
             input_dim (int): Input feature dimension
-            output_dim (int): Output feature dimension (alias for d_model)
-            d_model (int): If set, overrides output_dim
+            output_dim (int): Output feature dimension
             time_reduction (int): Total time reduction factor
             reduction_method (str): Where to apply time reduction - 'conv', 'lstm', or 'both'
             dropout (float): Dropout rate
         """
         super(SpeechEmbedding, self).__init__()
 
-        # allow transformer code to pass d_model as alias for output_dim
-        if d_model is not None:
-            output_dim = d_model
-        if output_dim is None or not all(x > 0 for x in [input_dim, output_dim, time_reduction]):
+        if not all(x > 0 for x in [input_dim, output_dim, time_reduction]):
             raise ValueError("All dimension values must be positive")
         if not 0 <= dropout < 1:
             raise ValueError("Dropout rate must be between 0 and 1")
