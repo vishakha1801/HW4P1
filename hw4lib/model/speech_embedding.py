@@ -119,7 +119,7 @@ class StackedBLSTMEmbedding(nn.Module):
         L_out = floor((L_in + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1)
         """
         numerator = (L_in + 2 * pool_params["padding"] -
-                     pool_params["dilation"] * (pool_params["kernel_size"] - 1) - 1)
+                    pool_params["dilation"] * (pool_params["kernel_size"] - 1) - 1)
         return (numerator // pool_params["stride"] + 1).to(torch.long)
 
     def calculate_downsampled_length(self, lengths: torch.Tensor) -> torch.Tensor:
