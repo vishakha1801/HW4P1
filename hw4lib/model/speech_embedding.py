@@ -384,12 +384,12 @@ def test_speech_embedding_both(time_reduction: int = 2):
     input_dim  = 80
     output_dim = 256
     max_length = 1000
-batch_size = 10
-input_tensor, input_lengths = get_inputs(input_dim, max_length, batch_size)
-model = SpeechEmbedding(input_dim, output_dim, time_reduction=time_reduction, reduction_method='both', dropout=0.1)
-summary(model, input_data=[input_tensor, input_lengths])
-output, output_lengths = model(input_tensor, input_lengths)
-print(output_lengths)
+    batch_size = 10
+    input_tensor, input_lengths = get_inputs(input_dim, max_length, batch_size)
+    model = SpeechEmbedding(input_dim, output_dim, time_reduction=time_reduction, reduction_method='both', dropout=0.1)
+    summary(model, input_data=[input_tensor, input_lengths])
+    output, output_lengths = model(input_tensor, input_lengths)
+    print(output_lengths)
 
 if __name__ == "__main__":
     #test_speech_embedding_lstm(time_reduction=2)
