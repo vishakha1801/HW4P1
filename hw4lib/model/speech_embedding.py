@@ -47,24 +47,24 @@ Architecture Flow:
 
 ## -------------------------------------------------------------------------------------------------
 ## StackedBLSTMEmbedding Class
-## -------------------------------------------------------------------------------------------------    
+## -------------------------------------------------------------------------------------------------
 class StackedBLSTMEmbedding(nn.Module):
     """
     Stacked Bidirectional LSTM with interleaved max-pooling layers.
     Architecture: BLSTM1 -> LayerNorm1 -> MaxPool1 -> BLSTM2 -> LayerNorm2 -> MaxPool2 -> Linear -> Dropout
     """
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, 
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int,
                  time_reduction: int = 2, dropout: float = 0.1):
         super(StackedBLSTMEmbedding, self).__init__()
-        
+
         if not all(x > 0 for x in [input_dim, hidden_dim, output_dim, time_reduction]):
             raise ValueError("All dimension values must be positive")
         if not 0 <= dropout < 1:
             raise ValueError("Dropout rate must be between 0 and 1")
-            
+
         # Calculate strides for the two pooling layers
         self.stride1, self.stride2 = self.closest_factors(time_reduction)
-        
+
         # Pool configurations
         self.pool1_params = {
             "kernel_size": self.stride1,
@@ -78,7 +78,7 @@ class StackedBLSTMEmbedding(nn.Module):
             "padding": 0,
             "dilation": 1
         }
-        
+
         # First BLSTM layer
         self.blstm1 = nn.LSTM(
             input_dim, hidden_dim // 2,
@@ -86,7 +86,7 @@ class StackedBLSTMEmbedding(nn.Module):
             batch_first=True,
             bidirectional=True
         )
-        
+
         # Second BLSTM layer
         self.blstm2 = nn.LSTM(
             hidden_dim, hidden_dim // 2,
@@ -94,11 +94,11 @@ class StackedBLSTMEmbedding(nn.Module):
             batch_first=True,
             bidirectional=True
         )
-        
+
         # Max pooling layers
         self.pool1 = nn.MaxPool1d(**self.pool1_params)
         self.pool2 = nn.MaxPool1d(**self.pool2_params)
-        
+
         # Final linear embedding and dropout
         self.linear_embed = nn.Linear(hidden_dim, output_dim)
         self.dropout = nn.Dropout(dropout)
@@ -112,16 +112,16 @@ class StackedBLSTMEmbedding(nn.Module):
         while n % factor != 0:
             factor -= 1
         return max(factor, n // factor), min(factor, n // factor)
-    
+
     def calculate_pool_output_length(self, L_in: torch.Tensor, pool_params: dict) -> torch.Tensor:
         """
         Calculate output length for a pooling layer using the formula:
         L_out = floor((L_in + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1)
         """
-        numerator = (L_in + 2 * pool_params["padding"] - 
-                    pool_params["dilation"] * (pool_params["kernel_size"] - 1) - 1)
+        numerator = (L_in + 2 * pool_params["padding"] -
+                     pool_params["dilation"] * (pool_params["kernel_size"] - 1) - 1)
         return (numerator // pool_params["stride"] + 1).to(torch.long)
-    
+
     def calculate_downsampled_length(self, lengths: torch.Tensor) -> torch.Tensor:
         """
         Calculate the downsampled length after all pooling operations.
@@ -144,39 +144,39 @@ class StackedBLSTMEmbedding(nn.Module):
         packed_input = pack_padded_sequence(x, x_len.cpu(), batch_first=True, enforce_sorted=False)
         packed_output, _ = self.blstm1(packed_input)
         output, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=x.size(1))
-        
+
         # First max pooling
         output = output.transpose(1, 2)  # (batch, hidden_dim, seq_len)
         output = self.pool1(output)
         output = output.transpose(1, 2)  # (batch, seq_len, hidden_dim)
         x_len = self.calculate_pool_output_length(x_len, self.pool1_params)
-        
+
         # Second BLSTM
         packed_input = pack_padded_sequence(output, x_len.cpu(), batch_first=True, enforce_sorted=False)
         packed_output, _ = self.blstm2(packed_input)
         output, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=output.size(1))
-        
+
         # Second max pooling
         output = output.transpose(1, 2)
         output = self.pool2(output)
         output = output.transpose(1, 2)
         x_len = self.calculate_pool_output_length(x_len, self.pool2_params)
-        
+
         # Final linear embedding and dropout
         output = self.linear_embed(output)
         output = self.dropout(output)
-        
+
         return output, x_len
 
 ## -------------------------------------------------------------------------------------------------
 ## Conv2DSubsampling Class
-## -------------------------------------------------------------------------------------------------    
+## -------------------------------------------------------------------------------------------------
 class Conv2DSubsampling(torch.nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, dropout: float = 0.0, 
+    def __init__(self, input_dim: int, output_dim: int, dropout: float = 0.0,
                  time_reduction: int = 2, kernel_size: int = 3):
         """
         Conv2dSubsampling module with time-only downsampling.
-        
+
         Args:
             input_dim (int): Input feature dimension
             output_dim (int): Output feature dimension
@@ -185,7 +185,7 @@ class Conv2DSubsampling(torch.nn.Module):
             kernel_size (int): Size of the convolutional kernel (default: 3)
         """
         super(Conv2DSubsampling, self).__init__()
-        
+
         self.kernel_size = kernel_size
         self.time_stride1, self.time_stride2 = self.closest_factors(time_reduction)
 
@@ -214,15 +214,15 @@ class Conv2DSubsampling(torch.nn.Module):
         """
         x = x.unsqueeze(1)  # Add a channel dimension for Conv2D
         x = self.conv(x)
-        
+
         # TODO: Apply frequency pooling and reshape
         # x = self.freq_pool(x)  # (batch, channels, time, 1)
         # x = x.squeeze(-1).transpose(1, 2)  # (batch, time, channels)
-        
+
         x = x.transpose(1, 2).contiguous().view(x.size(0), x.size(2), -1) # (batch, time, channels)
         x = self.linear_out(x) # (batch, time, channels)
         x = self.dropout(x)
-        
+
         x_len = self.calculate_downsampled_length(x_len, self.time_stride1, self.time_stride2)
         return x, x_len
 
@@ -232,40 +232,49 @@ class Conv2DSubsampling(torch.nn.Module):
             factor -= 1
         # Return the factor pair
         return max(factor, n // factor), min(factor, n // factor)
-    
+
     def calculate_downsampled_length(self, lengths: torch.Tensor, stride1: int, stride2: int) -> torch.Tensor:
         """
         Calculate the downsampled length for a given sequence length and strides.
-        
+
         Args:
             lengths (torch.Tensor): Original sequence lengths (batch_size)
             stride1 (int): Stride for first conv layer
             stride2 (int): Stride for second conv layer
-            
+
         Returns:
             torch.Tensor: Length after downsampling (batch_size)
-        """ 
+        """
         lengths = (lengths - (self.kernel_size - 1) - 1) // stride1 + 1
         lengths = (lengths - (self.kernel_size - 1) - 1) // stride2 + 1
         return lengths
 
 ## -------------------------------------------------------------------------------------------------
 ## SpeechEmbedding Class
-## -------------------------------------------------------------------------------------------------        
+## -------------------------------------------------------------------------------------------------
 class SpeechEmbedding(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, time_reduction: int = 6, 
-                 reduction_method: str = 'lstm', dropout: float = 0.0):
+    def __init__(self,
+                 input_dim: int,
+                 output_dim: int = None,
+                 d_model: int = None,
+                 time_reduction: int = 6,
+                 reduction_method: str = 'lstm',
+                 dropout: float = 0.0):
         """
         Args:
             input_dim (int): Input feature dimension
-            output_dim (int): Output feature dimension
+            output_dim (int): Output feature dimension (alias for d_model)
+            d_model (int): If set, overrides output_dim
             time_reduction (int): Total time reduction factor
             reduction_method (str): Where to apply time reduction - 'conv', 'lstm', or 'both'
             dropout (float): Dropout rate
         """
         super(SpeechEmbedding, self).__init__()
-        
-        if not all(x > 0 for x in [input_dim, output_dim, time_reduction]):
+
+        # allow transformer code to pass d_model as alias for output_dim
+        if d_model is not None:
+            output_dim = d_model
+        if output_dim is None or not all(x > 0 for x in [input_dim, output_dim, time_reduction]):
             raise ValueError("All dimension values must be positive")
         if not 0 <= dropout < 1:
             raise ValueError("Dropout rate must be between 0 and 1")
@@ -289,11 +298,11 @@ class SpeechEmbedding(nn.Module):
         # Initialize layers based on reduction method
         self.cnn = None
         self.blstm = None
-        
+
         if reduction_method in ['conv', 'both']:
             self.cnn = Conv2DSubsampling(
-                input_dim, 
-                self.embedding_dim, 
+                input_dim,
+                self.embedding_dim,
                 dropout=dropout,
                 time_reduction=conv_reduction
             )
@@ -328,7 +337,7 @@ class SpeechEmbedding(nn.Module):
         if self.blstm is not None:
             x, x_len = self.blstm(x, x_len)
         return x, x_len
-    
+
     def calculate_downsampled_length(self, lengths: torch.Tensor) -> torch.Tensor:
         """
         Calculate the downsampled length for a given sequence length.
@@ -375,12 +384,12 @@ def test_speech_embedding_both(time_reduction: int = 2):
     input_dim  = 80
     output_dim = 256
     max_length = 1000
-    batch_size = 10
-    input_tensor, input_lengths = get_inputs(input_dim, max_length, batch_size)
-    model = SpeechEmbedding(input_dim, output_dim, time_reduction=time_reduction, reduction_method='both', dropout=0.1)
-    summary(model, input_data=[input_tensor, input_lengths])
-    output, output_lengths = model(input_tensor, input_lengths)
-    print(output_lengths)
+batch_size = 10
+input_tensor, input_lengths = get_inputs(input_dim, max_length, batch_size)
+model = SpeechEmbedding(input_dim, output_dim, time_reduction=time_reduction, reduction_method='both', dropout=0.1)
+summary(model, input_data=[input_tensor, input_lengths])
+output, output_lengths = model(input_tensor, input_lengths)
+print(output_lengths)
 
 if __name__ == "__main__":
     #test_speech_embedding_lstm(time_reduction=2)
