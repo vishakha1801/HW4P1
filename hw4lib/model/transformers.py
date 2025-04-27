@@ -434,8 +434,8 @@ class EncoderDecoderTransformer(nn.Module):
             # TODO: Pass through decoder layer
             x_dec, self_attn, cross_attn = layer(
                 x_dec,
-                y=encoder_output,
-                key_padding_mask=pad_mask_tgt,
+                encoder_output,
+                dec_key_padding_mask=pad_mask_tgt,
                 enc_key_padding_mask=pad_mask_src,
                 attn_mask=causal_mask
             )
